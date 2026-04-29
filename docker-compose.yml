@@ -1,0 +1,89 @@
+services:
+  gateway:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./gateway/.env.example
+    volumes:
+      - ./gateway:/app
+    depends_on:
+      - auth-service
+      - employee-service
+      - attendance-service
+
+  auth-service:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "echo auth-service belum dibuat && sleep 3600"
+    ports:
+      - "8001:8001"
+    env_file:
+      - ./services/auth-service/.env.example
+    volumes:
+      - ./services/auth-service:/app
+    depends_on:
+      - auth-db
+
+  employee-service:
+    image: php:8.2-cli
+    working_dir: /app
+    command: sh -c "echo employee-service belum dibuat && php -S 0.0.0.0:8002 -t public"
+    ports:
+      - "8002:8002"
+    env_file:
+      - ./services/employee-service/.env.example
+    volumes:
+      - ./services/employee-service:/app
+    depends_on:
+      - employee-db
+
+  attendance-service:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "echo attendance-service belum dibuat && sleep 3600"
+    ports:
+      - "8003:8003"
+    env_file:
+      - ./services/attendance-service/.env.example
+    volumes:
+      - ./services/attendance-service:/app
+    depends_on:
+      - attendance-db
+
+  auth-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: auth_db
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    ports:
+      - "3307:3306"
+    volumes:
+      - auth-db-data:/var/lib/mysql
+
+  employee-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: employee_db
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    ports:
+      - "3308:3306"
+    volumes:
+      - employee-db-data:/var/lib/mysql
+
+  attendance-db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: attendance_db
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+    ports:
+      - "3309:3306"
+    volumes:
+      - attendance-db-data:/var/lib/mysql
+
+volumes:
+  auth-db-data:
+  employee-db-data:
+  attendance-db-data:
