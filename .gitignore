@@ -1,0 +1,13 @@
+node_modules/
+vendor/
+.env
+.env.local
+*.log
+storage/logs/
+bootstrap/cache/
+.DS_Store
+Thumbs.db
+docs/laporan-uts.pdf
+docs/arsitektur.png
+poster/poster-uts.pdf
+poster/poster-uts.png
