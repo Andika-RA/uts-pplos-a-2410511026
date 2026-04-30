@@ -201,6 +201,32 @@ app.post("/api/auth/refresh", async (req, res) => {
   }
 });
 
+app.post("/api/auth/logout", async (req, res) => {
+  const { refresh_token: refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(422).json({
+      message: "Refresh token wajib diisi",
+    });
+  }
+
+  try {
+    await pool.query(
+      "UPDATE refresh_tokens SET revoked_at = NOW() WHERE token = ? AND revoked_at IS NULL",
+      [refreshToken]
+    );
+
+    return res.json({
+      message: "Logout berhasil",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Gagal logout",
+      error: error.message,
+    });
+  }
+});
+
 app.use((req, res) => {
   res.status(404).json({
     message: "Route auth tidak ditemukan",
