@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const express = require("express");
 const jwt = require("jsonwebtoken");
@@ -19,6 +20,19 @@ function makeAccessToken(user) {
     process.env.JWT_SECRET || "change_this_secret",
     { expiresIn: process.env.JWT_EXPIRES_IN || "15m" }
   );
+}
+
+async function makeRefreshToken(userId) {
+  const token = crypto.randomBytes(40).toString("hex");
+  const days = Number(process.env.REFRESH_TOKEN_EXPIRES_DAYS || 7);
+  const expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+  await pool.query(
+    "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)",
+    [userId, token, expiresAt]
+  );
+
+  return token;
 }
 
 app.get("/health", (req, res) => {
@@ -114,6 +128,7 @@ app.post("/api/auth/login", async (req, res) => {
     }
 
     const accessToken = makeAccessToken(user);
+    const refreshToken = await makeRefreshToken(user.id);
 
     return res.json({
       message: "Login berhasil",
@@ -124,6 +139,7 @@ app.post("/api/auth/login", async (req, res) => {
           email: user.email,
         },
         access_token: accessToken,
+        refresh_token: refreshToken,
         token_type: "Bearer",
         expires_in: process.env.JWT_EXPIRES_IN || "15m",
       },
@@ -131,6 +147,55 @@ app.post("/api/auth/login", async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: "Gagal login",
+      error: error.message,
+    });
+  }
+});
+
+app.post("/api/auth/refresh", async (req, res) => {
+  const { refresh_token: refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(422).json({
+      message: "Refresh token wajib diisi",
+    });
+  }
+
+  try {
+    const [tokens] = await pool.query(
+      `SELECT rt.id, rt.user_id, u.name, u.email
+       FROM refresh_tokens rt
+       JOIN users u ON u.id = rt.user_id
+       WHERE rt.token = ?
+         AND rt.revoked_at IS NULL
+         AND rt.expires_at > NOW()
+       LIMIT 1`,
+      [refreshToken]
+    );
+
+    if (tokens.length === 0) {
+      return res.status(401).json({
+        message: "Refresh token tidak valid",
+      });
+    }
+
+    const user = {
+      id: tokens[0].user_id,
+      name: tokens[0].name,
+      email: tokens[0].email,
+    };
+
+    return res.json({
+      message: "Token berhasil diperbarui",
+      data: {
+        access_token: makeAccessToken(user),
+        token_type: "Bearer",
+        expires_in: process.env.JWT_EXPIRES_IN || "15m",
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Gagal refresh token",
       error: error.message,
     });
   }
