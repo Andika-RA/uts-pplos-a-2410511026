@@ -35,6 +35,17 @@ async function makeRefreshToken(userId) {
   return token;
 }
 
+async function fetchJson(url, options) {
+  const response = await fetch(url, options);
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(data.error_description || data.error || "Request OAuth gagal");
+  }
+
+  return data;
+}
+
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -222,6 +233,123 @@ app.post("/api/auth/logout", async (req, res) => {
   } catch (error) {
     return res.status(500).json({
       message: "Gagal logout",
+      error: error.message,
+    });
+  }
+});
+
+app.get("/api/auth/google", (req, res) => {
+  const clientId = process.env.GOOGLE_CLIENT_ID;
+  const callbackUrl = process.env.GOOGLE_CALLBACK_URL;
+
+  if (!clientId || !callbackUrl) {
+    return res.status(500).json({
+      message: "Google OAuth belum dikonfigurasi",
+    });
+  }
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: callbackUrl,
+    response_type: "code",
+    scope: "openid email profile",
+    access_type: "offline",
+    prompt: "select_account",
+  });
+
+  return res.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`);
+});
+
+app.get("/api/auth/google/callback", async (req, res) => {
+  const { code } = req.query;
+
+  if (!code) {
+    return res.status(422).json({
+      message: "Code OAuth tidak ditemukan",
+    });
+  }
+
+  try {
+    const tokenData = await fetchJson("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        code,
+        client_id: process.env.GOOGLE_CLIENT_ID || "",
+        client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
+        redirect_uri: process.env.GOOGLE_CALLBACK_URL || "",
+        grant_type: "authorization_code",
+      }),
+    });
+
+    const profile = await fetchJson("https://www.googleapis.com/oauth2/v2/userinfo", {
+      headers: {
+        Authorization: `Bearer ${tokenData.access_token}`,
+      },
+    });
+
+    if (!profile.email) {
+      return res.status(422).json({
+        message: "Email Google tidak ditemukan",
+      });
+    }
+
+    const [users] = await pool.query(
+      `SELECT id, name, email
+       FROM users
+       WHERE (oauth_provider = 'google' AND oauth_id = ?)
+          OR email = ?
+       LIMIT 1`,
+      [profile.id, profile.email]
+    );
+
+    let user;
+
+    if (users.length > 0) {
+      user = users[0];
+      await pool.query(
+        `UPDATE users
+         SET name = ?, oauth_provider = 'google', oauth_id = ?, avatar_url = ?
+         WHERE id = ?`,
+        [profile.name || user.name, profile.id, profile.picture || null, user.id]
+      );
+    } else {
+      const [result] = await pool.query(
+        `INSERT INTO users (name, email, oauth_provider, oauth_id, avatar_url)
+         VALUES (?, ?, 'google', ?, ?)`,
+        [profile.name || profile.email, profile.email, profile.id, profile.picture || null]
+      );
+
+      user = {
+        id: result.insertId,
+        name: profile.name || profile.email,
+        email: profile.email,
+      };
+    }
+
+    const accessToken = makeAccessToken(user);
+    const refreshToken = await makeRefreshToken(user.id);
+
+    return res.json({
+      message: "Login Google berhasil",
+      data: {
+        user: {
+          id: user.id,
+          name: profile.name || user.name,
+          email: user.email,
+          avatar_url: profile.picture || null,
+        },
+        access_token: accessToken,
+        refresh_token: refreshToken,
+        token_type: "Bearer",
+        expires_in: process.env.JWT_EXPIRES_IN || "15m",
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Gagal login Google",
       error: error.message,
     });
   }
