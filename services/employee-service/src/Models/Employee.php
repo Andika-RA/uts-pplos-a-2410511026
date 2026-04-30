@@ -6,17 +6,52 @@ class Employee
     {
     }
 
-    public function all(): array
+    public function all(array $filters = []): array
     {
-        $stmt = $this->db->query(
+        $page = max((int) ($filters['page'] ?? 1), 1);
+        $perPage = min(max((int) ($filters['per_page'] ?? 10), 1), 50);
+        $offset = ($page - 1) * $perPage;
+        $where = [];
+        $params = [];
+
+        if (!empty($filters['q'])) {
+            $where[] = "(e.name LIKE ? OR e.email LIKE ? OR e.employee_number LIKE ?)";
+            $keyword = '%' . $filters['q'] . '%';
+            $params[] = $keyword;
+            $params[] = $keyword;
+            $params[] = $keyword;
+        }
+
+        if (!empty($filters['department_id'])) {
+            $where[] = "e.department_id = ?";
+            $params[] = (int) $filters['department_id'];
+        }
+
+        $whereSql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+        $count = $this->db->prepare("SELECT COUNT(*) AS total FROM employees e {$whereSql}");
+        $count->execute($params);
+        $total = (int) $count->fetch()['total'];
+
+        $stmt = $this->db->prepare(
             "SELECT e.*, d.name AS department_name, p.name AS position_name
              FROM employees e
              JOIN departments d ON d.id = e.department_id
              JOIN positions p ON p.id = e.position_id
-             ORDER BY e.id DESC"
+             {$whereSql}
+             ORDER BY e.id DESC
+             LIMIT {$perPage} OFFSET {$offset}"
         );
+        $stmt->execute($params);
 
-        return $stmt->fetchAll();
+        return [
+            'data' => $stmt->fetchAll(),
+            'meta' => [
+                'page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+            ],
+        ];
     }
 
     public function find(int $id): ?array

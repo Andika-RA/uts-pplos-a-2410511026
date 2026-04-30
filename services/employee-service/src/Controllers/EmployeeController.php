@@ -8,9 +8,14 @@ class EmployeeController
 
     public function index(): void
     {
-        Response::json([
-            'data' => $this->employee->all(),
+        $result = $this->employee->all([
+            'page' => $_GET['page'] ?? 1,
+            'per_page' => $_GET['per_page'] ?? 10,
+            'q' => $_GET['q'] ?? null,
+            'department_id' => $_GET['department_id'] ?? null,
         ]);
+
+        Response::json($result);
     }
 
     public function show(int $id): void
