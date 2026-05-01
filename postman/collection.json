@@ -548,6 +548,22 @@
           }
         }
       ]
+    },
+    {
+      "name": "cek health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/health",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "health"
+          ]
+        }
+      }
     }
   ]
 }
