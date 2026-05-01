@@ -99,6 +99,82 @@ app.post("/api/attendance/clock-out", async (req, res) => {
   }
 });
 
+app.post("/api/leaves", async (req, res) => {
+  const { employee_id: employeeId, start_date: startDate, end_date: endDate, reason } = req.body;
+
+  if (!employeeId || !startDate || !endDate || !reason) {
+    return res.status(422).json({
+      message: "employee_id, start_date, end_date, dan reason wajib diisi",
+    });
+  }
+
+  if (endDate < startDate) {
+    return res.status(422).json({
+      message: "end_date tidak boleh lebih kecil dari start_date",
+    });
+  }
+
+  try {
+    const [result] = await pool.query(
+      `INSERT INTO leave_requests (employee_id, start_date, end_date, reason)
+       VALUES (?, ?, ?, ?)`,
+      [employeeId, startDate, endDate, reason]
+    );
+
+    return res.status(201).json({
+      message: "Pengajuan cuti berhasil dibuat",
+      data: {
+        id: result.insertId,
+        employee_id: employeeId,
+        status: "pending",
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Gagal membuat pengajuan cuti",
+      error: error.message,
+    });
+  }
+});
+
+async function updateLeaveStatus(req, res, status) {
+  const { id } = req.params;
+  const { note } = req.body;
+
+  try {
+    const [leaves] = await pool.query("SELECT id, status FROM leave_requests WHERE id = ? LIMIT 1", [id]);
+
+    if (leaves.length === 0) {
+      return res.status(404).json({
+        message: "Pengajuan cuti tidak ditemukan",
+      });
+    }
+
+    if (leaves[0].status !== "pending") {
+      return res.status(409).json({
+        message: "Pengajuan cuti sudah diproses",
+      });
+    }
+
+    await pool.query(
+      "UPDATE leave_requests SET status = ?, approver_note = ? WHERE id = ?",
+      [status, note || null, id]
+    );
+
+    return res.json({
+      message: status === "approved" ? "Cuti berhasil disetujui" : "Cuti berhasil ditolak",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Gagal memproses cuti",
+      error: error.message,
+    });
+  }
+}
+
+app.patch("/api/leaves/:id/approve", (req, res) => updateLeaveStatus(req, res, "approved"));
+app.patch("/api/leaves/:id/reject", (req, res) => updateLeaveStatus(req, res, "rejected"));
+
 app.use((req, res) => {
   res.status(404).json({
     message: "Route attendance tidak ditemukan",

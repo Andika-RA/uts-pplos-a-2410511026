@@ -9,3 +9,15 @@ CREATE TABLE IF NOT EXISTS attendances (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY unique_employee_attendance_date (employee_id, attendance_date)
 );
+
+CREATE TABLE IF NOT EXISTS leave_requests (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  employee_id BIGINT UNSIGNED NOT NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  reason TEXT NOT NULL,
+  status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
+  approver_note TEXT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
