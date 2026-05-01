@@ -175,6 +175,67 @@ async function updateLeaveStatus(req, res, status) {
 app.patch("/api/leaves/:id/approve", (req, res) => updateLeaveStatus(req, res, "approved"));
 app.patch("/api/leaves/:id/reject", (req, res) => updateLeaveStatus(req, res, "rejected"));
 
+app.get("/api/attendance/monthly-summary", async (req, res) => {
+  const { employee_id: employeeId, month } = req.query;
+
+  if (!month) {
+    return res.status(422).json({
+      message: "month wajib diisi, contoh: 2026-05",
+    });
+  }
+
+  try {
+    const attendanceParams = [`${month}%`];
+    let attendanceWhere = "WHERE attendance_date LIKE ?";
+
+    if (employeeId) {
+      attendanceWhere += " AND employee_id = ?";
+      attendanceParams.push(employeeId);
+    }
+
+    const [attendanceRows] = await pool.query(
+      `SELECT
+         COUNT(*) AS total_attendance_days,
+         SUM(status = 'present') AS total_present,
+         SUM(status = 'incomplete') AS total_incomplete
+       FROM attendances
+       ${attendanceWhere}`,
+      attendanceParams
+    );
+
+    const leaveParams = [`${month}%`, `${month}%`];
+    let leaveWhere = "WHERE status = 'approved' AND (start_date LIKE ? OR end_date LIKE ?)";
+
+    if (employeeId) {
+      leaveWhere += " AND employee_id = ?";
+      leaveParams.push(employeeId);
+    }
+
+    const [leaveRows] = await pool.query(
+      `SELECT COUNT(*) AS total_approved_leaves
+       FROM leave_requests
+       ${leaveWhere}`,
+      leaveParams
+    );
+
+    return res.json({
+      data: {
+        month,
+        employee_id: employeeId || null,
+        total_attendance_days: Number(attendanceRows[0].total_attendance_days || 0),
+        total_present: Number(attendanceRows[0].total_present || 0),
+        total_incomplete: Number(attendanceRows[0].total_incomplete || 0),
+        total_approved_leaves: Number(leaveRows[0].total_approved_leaves || 0),
+      },
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: "Gagal mengambil rekap bulanan",
+      error: error.message,
+    });
+  }
+});
+
 app.use((req, res) => {
   res.status(404).json({
     message: "Route attendance tidak ditemukan",
