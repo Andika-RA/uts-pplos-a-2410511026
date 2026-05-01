@@ -4,8 +4,35 @@ require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT || 8003;
+const EMPLOYEE_SERVICE_URL = process.env.EMPLOYEE_SERVICE_URL || "http://localhost:8002";
 
 app.use(express.json());
+
+async function employeeExists(employeeId) {
+  const response = await fetch(`${EMPLOYEE_SERVICE_URL}/api/employees/${employeeId}`);
+  return response.ok;
+}
+
+async function validateEmployee(employeeId, res) {
+  try {
+    const exists = await employeeExists(employeeId);
+
+    if (!exists) {
+      res.status(404).json({
+        message: "Pegawai tidak ditemukan di employee-service",
+      });
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    res.status(502).json({
+      message: "Employee service belum bisa dihubungi",
+      error: error.message,
+    });
+    return false;
+  }
+}
 
 app.get("/health", (req, res) => {
   res.json({
@@ -24,6 +51,11 @@ app.post("/api/attendance/clock-in", async (req, res) => {
   }
 
   try {
+    const employeeValid = await validateEmployee(employeeId, res);
+    if (!employeeValid) {
+      return;
+    }
+
     const [existing] = await pool.query(
       "SELECT id, clock_in_at FROM attendances WHERE employee_id = ? AND attendance_date = CURDATE() LIMIT 1",
       [employeeId]
@@ -66,6 +98,11 @@ app.post("/api/attendance/clock-out", async (req, res) => {
   }
 
   try {
+    const employeeValid = await validateEmployee(employeeId, res);
+    if (!employeeValid) {
+      return;
+    }
+
     const [rows] = await pool.query(
       "SELECT id, clock_out_at FROM attendances WHERE employee_id = ? AND attendance_date = CURDATE() LIMIT 1",
       [employeeId]
@@ -115,6 +152,11 @@ app.post("/api/leaves", async (req, res) => {
   }
 
   try {
+    const employeeValid = await validateEmployee(employeeId, res);
+    if (!employeeValid) {
+      return;
+    }
+
     const [result] = await pool.query(
       `INSERT INTO leave_requests (employee_id, start_date, end_date, reason)
        VALUES (?, ?, ?, ?)`,
