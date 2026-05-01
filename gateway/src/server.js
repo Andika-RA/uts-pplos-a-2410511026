@@ -1,5 +1,6 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
+const rateLimit = require("express-rate-limit");
 const { createProxyMiddleware } = require("http-proxy-middleware");
 require("dotenv").config();
 
@@ -11,6 +12,13 @@ const services = {
   employee: process.env.EMPLOYEE_SERVICE_URL || "http://localhost:8002",
   attendance: process.env.ATTENDANCE_SERVICE_URL || "http://localhost:8003",
 };
+
+const limiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 function verifyToken(req, res, next) {
   const authHeader = req.headers.authorization || "";
@@ -60,6 +68,8 @@ app.get("/health", (req, res) => {
     },
   });
 });
+
+app.use(limiter);
 
 app.use("/api/auth", proxyTo(services.auth));
 app.use("/api/employees", verifyToken, proxyTo(services.employee));
